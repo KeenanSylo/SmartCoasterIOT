@@ -1,14 +1,11 @@
-# main.py -- put your code here!
-import onewire, ds18x20, time
+import time
+import machine
+import onewire
+import ds18x20
 from machine import Pin
-import time                   # Allows use of time.sleep() for delays
-from mqtt import MQTTClient   # For use of MQTT protocol to talk to Adafruit IO
-import machine                # Interfaces with hardware components
-import micropython            # Needed to run any MicroPython code
-import random                 # Random number generator
-import keys                   # Contain all keys used here
-import wifiConnection         # Contains functions to connect/disconnect from WiFi 
-
+from lib import keys  # Assuming keys.py contains your configuration keys
+import wifiConnection
+from adafruit import AdafruitIO  # Import your AdafruitIO class
 
 led = Pin(2, Pin.OUT)
 button = Pin(1, Pin.IN, Pin.PULL_DOWN)
@@ -18,46 +15,63 @@ ds_sensor = ds18x20.DS18X20(onewire.OneWire(ds_pin))
 roms = ds_sensor.scan()
 
 
-def temp_sensor(r):
+def temp_sensor():
     ds_sensor.convert_temp()
-    time.sleep_ms(50)
-    for rom in r:
-      tempC = ds_sensor.read_temp(rom)
-      print('temperature (C):', "{:.2f}".format(tempC))
-    time.sleep(1)
+    time.sleep_ms(750)
+    for rom in roms:
+        tempC = ds_sensor.read_temp(rom)
+        print("Temperature (C): {:.2f}".format(tempC))
+        return tempC  # Return the first temperature found
+    return None
+
+# Create an instance of AdafruitIO
+adafruit_io = AdafruitIO()
 
 
-def send_temp():
-    temp = temp_sensor(roms)
-    print("Publishing: {0} to {1} ... ".format(temp, keys.AIO_TEMP_FEED), end='')
+def send_temp(temp):
     try:
-        client.publish(topic=keys.AIO_TEMP_FEED, msg=str(temp))
-        print("DONE")
+        print("Publishing:", temp)
+        adafruit_io.publish(feed_key=keys.AIO_FEEDS["temp"], value=temp)
+        print(" ")
     except Exception as e:
-        print("FAILED")
+        print("FAILED:", e)
 
+def send_oncoaster(on):
+    try:
+        adafruit_io.publish(feed_key=keys.AIO_FEEDS["oncoaster"], value=on)
+    except Exception as e:
+        print("FAILED:", e)
 
 # Try WiFi Connection
 try:
     ip = wifiConnection.connect()
-except KeyboardInterrupt:
-    print("Keyboard interrupt")
+    print("Connected to WiFi, IP:", ip)
+except Exception as e:
+    print("WiFi connection failed:", e)
+    raise
 
-# Use the MQTT protocol to connect to Adafruit IO
-client = MQTTClient(keys.AIO_CLIENT_ID, keys.AIO_SERVER, keys.AIO_PORT, keys.AIO_USER, keys.AIO_KEY)
+# Use AdafruitIO class to connect to Adafruit IO
+connected = adafruit_io.connect()
 
-try:                      # Code between try: and finally: may cause an error
-                          # so ensure the client disconnects the server if
-                          # that happens.
-    while 1:              # Repeat this loop forever
-        if button.value()==0: 
-          led.value(1)
-          send_temp()
+last_button_state = 0
+try:
+    if connected:
+        while True:
+            current_state = button.value()
+            send_oncoaster(current_state)
+            if current_state == 0:
+                led.on()
+                while button.value() == 0:  # Stay in loop while button is pressed
+                    temp = temp_sensor()
+                    send_temp(temp)
+                    time.sleep(1)  # Limit update rate
+                led.off()
 
-        elif button.value()==1:
-          led.value(0)    # Send a random number to Adafruit IO if it's time.
-finally:                  # If an exception is thrown ...
-    client.disconnect()   # ... disconnect the client and clean up.
-    client = None
+            last_button_state = current_state
+            time.sleep(0.1)
+
+finally:
+    if connected:
+        adafruit_io.disconnect()
     wifiConnection.disconnect()
-    print("Disconnected from Adafruit IO.") 
+    print("Disconnected from Adafruit IO.")
