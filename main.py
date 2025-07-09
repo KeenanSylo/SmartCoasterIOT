@@ -3,12 +3,12 @@ import machine
 import onewire
 import ds18x20
 from machine import Pin
-from lib import keys  # Assuming keys.py contains your configuration keys
+from lib import keys
 import wifiConnection
-from adafruit import AdafruitIO  # Import your AdafruitIO class
+from adafruit import AdafruitIO
 from machine import PWM
+from buzzer import playsong
 
-led = Pin(2, Pin.OUT)
 button = Pin(1, Pin.IN, Pin.PULL_DOWN)
 red_pwm = PWM(Pin(8))
 green_pwm = PWM(Pin(7))
@@ -28,7 +28,7 @@ def temp_sensor():
     for rom in roms:
         tempC = ds_sensor.read_temp(rom)
         print("Temperature (C): {:.2f}".format(tempC))
-        return tempC  # Return the first temperature found
+        return tempC
     return None
 
 
@@ -60,13 +60,10 @@ def check_and_send_oncoaster(current_state):
 
 
 def set_rgbcolor(temp_c):
-    # Clamp temp between 20 and 35
     temp_c = max(29, min(32, temp_c))
     
-    # Normalize temp_c in range [29, 32] to [0.0, 1.0]
-    t = (temp_c - 29) / (32 - 29)  # (temp - min) / (max - min)
+    t = (temp_c - 29) / (32 - 29)
 
-    # Calculate RGB (linear fade: blue to red)
     red = int(t * 65535)
     green = 0
     blue = int((1 - t) * 65535)
@@ -76,7 +73,6 @@ def set_rgbcolor(temp_c):
     blue_pwm.duty_u16(blue)
 
 
-# Try WiFi Connection
 try:
     ip = wifiConnection.connect()
     print("Connected to WiFi, IP:", ip)
@@ -84,11 +80,13 @@ except Exception as e:
     print("WiFi connection failed:", e)
     raise
 
-# Use AdafruitIO class to connect to Adafruit IO
 connected = adafruit_io.connect()
 
+song = ["E5","G5","A5","P","E5","G5","B5","A5","P","E5","G5","A5","P","G5","E5"]
 last_button_state = button.value()
 oncoaster_value = 0
+buzz = False 
+
 try:
     if connected:
         while True:
@@ -97,14 +95,15 @@ try:
                 send_oncoaster(current_state)
                 check_and_send_oncoaster(current_state)
             if current_state == 0:
-                led.on()
-                while button.value() == 0:  # Stay in loop while button is pressed
+                while button.value() == 0:
                     temp = temp_sensor()
                     if temp is not None:
                         set_rgbcolor(temp)
                         send_temp(temp)
-                        time.sleep(0.5)  # Limit update rate
-                led.off()
+                        if temp >= 32:
+                            playsong(song)
+                            buzz = True
+                        time.sleep(2)
                 red_pwm.duty_u16(0)
                 green_pwm.duty_u16(0)
                 blue_pwm.duty_u16(0)

@@ -8,10 +8,10 @@ class AdafruitIO:
         self.connected = False
 
     def connect(self):
-        """Connect to Adafruit IO"""
+        #Connect to Adafruit IO
         try:
             self.client = MQTTClient(
-                client_id="smart-trashcan-" + keys.AIO_USER,
+                client_id="smartCoaster" + keys.AIO_USER,
                 server=keys.AIO_SERVER,
                 user=keys.AIO_USER,
                 password=keys.AIO_KEY,
@@ -27,7 +27,7 @@ class AdafruitIO:
             return False
 
     def publish(self, feed_key, value):
-        """Publish to a specific feed"""
+        #Publish to a specific feed
         if not self.connected:
             if not self.connect():
                 return False
