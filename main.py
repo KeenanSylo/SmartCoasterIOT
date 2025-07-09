@@ -7,7 +7,7 @@ from lib import keys
 import wifiConnection
 from adafruit import AdafruitIO
 from machine import PWM
-from buzzer import playsong
+from buzzer import playsong, bequiet
 
 button = Pin(1, Pin.IN, Pin.PULL_DOWN)
 red_pwm = PWM(Pin(8))
@@ -85,8 +85,7 @@ connected = adafruit_io.connect()
 song = ["E5","G5","A5","P","E5","G5","B5","A5","P","E5","G5","A5","P","G5","E5"]
 last_button_state = button.value()
 oncoaster_value = 0
-buzz = False 
-
+buzz = False
 try:
     if connected:
         while True:
@@ -100,8 +99,9 @@ try:
                     if temp is not None:
                         set_rgbcolor(temp)
                         send_temp(temp)
-                        if temp >= 32:
+                        if temp >= 32 and buzz == False:
                             playsong(song)
+                            bequiet()
                             buzz = True
                         time.sleep(2)
                 red_pwm.duty_u16(0)
